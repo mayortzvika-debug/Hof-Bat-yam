@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bat Yam 2026 - Pro OS</title>
+    
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="favicon.png">
+    
+    <meta property="og:title" content="מערכת ניהול חגיגות ה-100 - בת ים">
+    <meta property="og:description" content="הדשבורד הרשמי לניהול אירועי הקיץ. התחבר עכשיו לצפייה בנתונים בזמן אמת.">
+    <meta property="og:image" content="og-image.jpg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:type" content="website">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary: #6366f1;
+            --secondary: #0ea5e9;
+            --bg-dark: #0f172a;
+        }
+
+        body { 
+            background-color: var(--bg-dark); 
+            color: #e2e8f0; 
+            font-family: 'Heebo', sans-serif; 
+            overflow-x: hidden;
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+        }
+
+        /* --- CUSTOM LOADER SCREEN --- */
+        #loader-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: var(--bg-dark);
+            display: flex;
+            flex-col: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+        }
+
+        #loader-screen.hidden-loader {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loader-img-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loader-ring {
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: var(--secondary);
+            border-right-color: var(--primary);
+            animation: spin 1.5s linear infinite;
+        }
+
+        .loader-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.5));
+        }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* --------------------------- */
+
+        /* --- THE MAGIC BANNER --- */
+        .hero-wrapper {
+            position: relative;
+            height: 350px;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Layer 1: Day Image (Base) */
+        .hero-day {
+            position: absolute;
+            inset: 0;
+            background-image: url('day.jpg'); /* Your file */
+            background-size: cover;
+            background-position: center bottom;
+        }
+
+        /* Layer 2: Night Image (Overlay with Mask) */
+        .hero-night {
+            position: absolute;
+            inset: 0;
+            background-image: url('night.jpg'); /* Your file */
+            background-size: cover;
+            background-position: center;
+            /* This creates the smooth fade from left to right */
+            mask-image: linear-gradient(to right, black 30%, transparent 80%);
+            -webkit-mask-image: linear-gradient(to right, black 30%, transparent 80%);
+        }
+
+        /* Layer 3: Dark Overlay for Text Readability */
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(15, 23, 42, 0.9) 0%, rgba(15, 23, 42, 0.4) 50%, transparent 100%);
+            z-index: 10;
+        }
+
+        /* Layer 4: Content */
+        .hero-content {
+            position: relative;
+            z-index: 20;
+            height: 100%;
+            display: flex;
+            flex-col: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        /* Glassmorphism Classes */
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+        .glass-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); transition: 0.3s; position: relative; overflow: hidden; }
+        .glass-card:hover { transform: translateY(-4px); background: rgba(255, 255, 255, 0.08); border-color: rgba(99, 102, 241, 0.3); }
+
+        /* Inputs & Scrollbars */
+        input, textarea, select { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255,255,255,0.1); color: white; padding: 12px; border-radius: 12px; width: 100%; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        .nav-btn.active { background: white; color: #0f172a; box-shadow: 0 0 15px rgba(255,255,255,0.3); border: none; }
+        
+        .sync-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite; }
+    </style>
+</head>
+<body class="h-full">
+
+<div id="loader-screen">
+    <div class="loader-img-container mb-4">
+        <div class="loader-ring"></div>
+        <img src="loader.png" alt="Loading..." class="loader-img">
+    </div>
+    <p class="text-slate-400 text-sm tracking-wider animate-pulse">טוען מערכת...</p>
+</div>
+
+<nav class="fixed top-0 w-full z-50 glass border-b border-white/5 h-16 flex items-center px-6 justify-between">
+    <div class="flex items-center gap-2">
+        <div class="sync-dot"></div>
+        <span class="text-xs font-bold text-emerald-400 tracking-wider">ONLINE SYSTEM</span>
+    </div>
+    <button onclick="clearDatabase()" class="text-xs flex items-center gap-1 text-rose-400 hover:text-white transition opacity-70 hover:opacity-100">
+        <i data-lucide="trash-2" class="w-3 h-3"></i> איפוס
+    </button>
+</nav>
+
+<div class="max-w-7xl mx-auto p-4 md:p-8 pt-24">
+
+    <div class="hero-wrapper mb-10">
+        <div class="hero-day"></div>
+        <div class="hero-night"></div>
+        <div class="hero-overlay"></div>
+
+        <div class="hero-content pt-10">
+            <h1 class="text-6xl md:text-8xl font-black text-white tracking-tighter drop-shadow-2xl mb-2">
+                BAT YAM <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">2026</span>
+            </h1>
+            <p class="text-xl md:text-2xl text-blue-100 font-light tracking-wide drop-shadow-lg">
+                ניהול חגיגות ה-100 לעיר
+            </p>
+            
+            <div class="mt-8 flex flex-wrap justify-center gap-3">
+                <button onclick="loadFromLinkedSheet()" class="group bg-white text-slate-900 px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] flex items-center gap-2 transition hover:scale-105">
+                    <i data-lucide="refresh-cw" class="w-4 h-4 group-hover:rotate-180 transition-transform duration-500"></i>
+                    סנכרן נתונים
+                </button>
+                <label class="bg-black/40 hover:bg-black/60 text-white px-5 py-3 rounded-xl font-medium cursor-pointer border border-white/20 backdrop-blur-md flex items-center gap-2 transition hover:scale-105">
+                    <i data-lucide="upload" class="w-4 h-4"></i> טען קובץ
+                    <input type="file" id="fileInput" class="hidden" accept=".csv, .xlsx, .xls" onchange="handleFile(this)">
+                </label>
+                <button onclick="openAddModal()" class="bg-black/40 hover:bg-black/60 text-white px-5 py-3 rounded-xl font-medium border border-white/20 backdrop-blur-md flex items-center gap-2 transition hover:scale-105">
+                    <i data-lucide="plus" class="w-4 h-4"></i> ידני
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-center mb-8">
+        <div class="bg-slate-800/80 p-1.5 rounded-2xl border border-white/10 inline-flex shadow-xl backdrop-blur-xl">
+            <button onclick="switchView('list')" id="btn-list" class="nav-btn active px-6 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white transition flex items-center gap-2">
+                <i data-lucide="layout-list" class="w-4 h-4"></i> רשימה
+            </button>
+            <button onclick="switchView('calendar')" id="btn-calendar" class="nav-btn px-6 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white transition flex items-center gap-2">
+                <i data-lucide="calendar" class="w-4 h-4"></i> לוח שנה
+            </button>
+            <button onclick="switchView('tasks')" id="btn-tasks" class="nav-btn px-6 py-2.5 rounded-xl text-sm font-bold text-slate-400 hover:text-white transition flex items-center gap-2">
+                <i data-lucide="check-square" class="w-4 h-4"></i> משימות
+                <span id="globalTaskCount" class="bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md hidden">0</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="contentArea" class="relative min-h-[500px]">
+        <div id="listView" class="view-section grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+        
+        <div id="calendarView" class="view-section hidden glass rounded-3xl p-6 md:p-8">
+            <div class="flex justify-between items-center mb-8">
+                <button onclick="changeMonth(-1)" class="p-2 hover:bg-white/10 rounded-full transition"><i data-lucide="chevron-right"></i></button>
+                <h2 id="calendarTitle" class="text-3xl font-black text-white tracking-tight"></h2>
+                <button onclick="changeMonth(1)" class="p-2 hover:bg-white/10 rounded-full transition"><i data-lucide="chevron-left"></i></button>
+            </div>
+            <div id="calendarGrid" class="grid grid-cols-7 gap-3"></div>
+        </div>
+        
+        <div id="tasksView" class="view-section hidden">
+            <div class="glass rounded-3xl p-8 max-w-4xl mx-auto">
+                <h2 class="text-2xl font-bold text-white mb-6 flex items-center gap-3"><i data-lucide="list-todo" class="text-indigo-400"></i> סטטוס משימות</h2>
+                <div id="globalTaskList" class="space-y-4"></div>
+                <div id="noTasksMessage" class="hidden text-center py-20 text-slate-500">
+                    <i data-lucide="smile" class="w-12 h-12 mb-2 mx-auto opacity-50"></i> אין משימות פתוחות
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="eventModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 hidden backdrop-blur-sm p-4" onclick="closeModals()">
+    <div class="glass bg-slate-900 w-full max-w-5xl rounded-3xl border border-white/10 shadow-2xl relative flex flex-col md:flex-row overflow-hidden min-h-[600px] animate-in fade-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+        
+        <div class="w-full md:w-1/3 bg-slate-950/50 p-8 border-l border-white/5 flex flex-col relative overflow-hidden">
+            <div id="emHeader" class="absolute inset-0 opacity-20 z-0"></div>
+            <div class="relative z-10">
+                <span id="emDate" class="inline-block bg-white/10 backdrop-blur px-3 py-1 rounded-lg text-xs font-mono text-white mb-4 border border-white/10"></span>
+                <h2 id="emTitle" class="text-3xl md:text-4xl font-black text-white leading-tight mb-8"></h2>
+                
+                <div class="relative group cursor-pointer border-2 border-dashed border-white/10 hover:border-indigo-500 rounded-2xl aspect-video flex items-center justify-center bg-black/20 overflow-hidden transition-all" id="imagePreviewContainer">
+                    <img id="emImage" class="absolute inset-0 w-full h-full object-cover hidden transition group-hover:scale-105">
+                    <div class="text-center p-4 opacity-50 group-hover:opacity-100 transition" id="uploadPlaceholder">
+                        <i data-lucide="image" class="w-8 h-8 mx-auto mb-2"></i>
+                        <span class="text-xs">הוסף תמונה</span>
+                    </div>
+                    <input type="file" id="emImageInput" class="hidden" accept="image/*" onchange="uploadImage(this)">
+                </div>
+            </div>
+            <div class="mt-auto pt-8">
+                <div class="flex items-center gap-2 mb-2 text-slate-400 text-xs font-bold uppercase"><i data-lucide="users" class="w-3 h-3"></i> קהל יעד</div>
+                <div id="emAudience" class="text-lg text-white font-medium"></div>
+            </div>
+        </div>
+
+        <div class="w-full md:w-2/3 p-8 bg-slate-900/95 flex flex-col">
+            <button onclick="closeModals()" class="absolute top-6 left-6 p-2 rounded-full bg-white/5 hover:bg-white/10 transition z-20 text-slate-400 hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
+            
+            <div class="mb-8">
+                <h3 class="text-sm font-bold text-slate-500 uppercase mb-3">פרטים</h3>
+                <div class="bg-black/20 p-5 rounded-2xl border border-white/5 text-slate-300 text-sm leading-relaxed whitespace-pre-wrap min-h-[80px]" id="emDesc"></div>
+            </div>
+
+            <div class="flex-1 flex flex-col min-h-0">
+                <div class="flex justify-between items-end mb-4 border-b border-white/5 pb-4">
+                    <h3 class="text-sm font-bold text-slate-500 uppercase">משימות</h3>
+                    <span id="taskCount" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded"></span>
+                </div>
+                <div id="taskList" class="flex-1 overflow-y-auto pr-2 space-y-2 mb-4 scrollbar-thin"></div>
+                <div class="flex gap-2 mt-auto">
+                    <input type="text" id="newTaskInput" placeholder="משימה חדשה..." class="bg-black/30 border-white/10 focus:border-indigo-500">
+                    <button onclick="addNewTask()" class="bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl"><i data-lucide="plus" class="w-5 h-5"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="addModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 hidden backdrop-blur-sm p-4" onclick="closeModals()">
+    <div class="glass bg-slate-900 w-full max-w-md p-8 rounded-3xl border border-white/10 shadow-2xl" onclick="event.stopPropagation()">
+        <h2 class="text-2xl font-bold text-white mb-6">אירוע חדש</h2>
+        <div class="space-y-4">
+            <input type="text" id="addTitle" placeholder="שם האירוע">
+            <input type="date" id="addDate">
+            <textarea id="addDesc" rows="2" placeholder="תיאור"></textarea>
+            <input type="text" id="addAudience" placeholder="קהל יעד">
+            <input type="text" id="addTasks" placeholder="משימות (מופרד בפסיק)">
+            <button onclick="saveManualEvent()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-xl font-bold mt-2 shadow-lg">שמור</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- FIREBASE SETUP ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBUXyx1kxTaEzhrwLjmgp-4-BszrDUgch4",
+      authDomain: "bat-yam100.firebaseapp.com",
+      databaseURL: "https://bat-yam100-default-rtdb.firebaseio.com",
+      projectId: "bat-yam100",
+      storageBucket: "bat-yam100.firebasestorage.app",
+      messagingSenderId: "767374849866",
+      appId: "1:767374849866:web:812999710dca298c64b3b3",
+      measurementId: "G-R788NRH3PX"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const eventsRef = db.ref('events');
+
+    // --- CONFIG ---
+    let events = [];
+    let currentDate = new Date(2026, 6, 1);
+    let activeEventId = null;
+    const colors = ['#6366f1', '#f43f5e', '#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b']; 
+    const LINKED_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ02cU8av1KtchNykwq-QxjU6LiLZx-CSp5B28BxAgnsvJjlTwMMW1QO8qNylEYC78qDQFT_S3-fzUA/pub?output=csv";
+
+    // --- APP LOGIC ---
+    eventsRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        events = data ? Object.values(data).map(e => ({...e, dateObj: new Date(e.dateObj), tasks: e.tasks || []})) : [];
+        if(document.getElementById('listView').innerHTML === '' && events.length > 0) {
+             const firstDate = new Date(Math.min(...events.map(e => e.dateObj)));
+             currentDate = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+        }
+        refreshView();
+        
+        // --- HIDE LOADER WHEN DATA IS READY ---
+        setTimeout(() => {
+            document.getElementById('loader-screen').classList.add('hidden-loader');
+        }, 1000); // Small delay for effect
+    });
+
+    function refreshView() {
+        if (!document.getElementById('listView').classList.contains('hidden')) renderMain();
+        else if (!document.getElementById('calendarView').classList.contains('hidden')) renderMain();
+        else renderGlobalTasks();
+        updateGlobalBadge();
+        if(activeEventId && !document.getElementById('eventModal').classList.contains('hidden')) {
+            const e = events.find(ev => ev.id == activeEventId);
+            if(e) updateModalContent(e);
+        }
+        lucide.createIcons();
+    }
+
+    // --- IMPORT & PARSING ---
+    function loadFromLinkedSheet() {
+        const btn = event.currentTarget;
+        btn.innerHTML = `<i data-lucide="loader-2" class="animate-spin"></i> טוען...`; lucide.createIcons();
+        fetch(LINKED_SHEET_URL).then(r=>r.text()).then(csv=>{
+            Papa.parse(csv, {header:false, skipEmptyLines:true, complete: res=>processData(res.data)});
+            btn.innerHTML = `<i data-lucide="check"></i> הצליח`; setTimeout(()=>btn.innerHTML=`<i data-lucide="refresh-cw"></i> סנכרן נתונים`, 2000);
+        }).catch(e=>alert("שגיאה: "+e));
+    }
+
+    function handleFile(input) {
+        if(!input.files[0]) return;
+        const f = input.files[0]; input.value = '';
+        if(f.name.endsWith('.csv')) Papa.parse(f, {header:false, skipEmptyLines:true, complete:res=>processData(res.data)});
+        else {
+            const r = new FileReader();
+            r.onload = e => {
+                const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                processData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:""}));
+            };
+            r.readAsArrayBuffer(f);
+        }
+    }
+
+    function processData(rows) {
+        if(rows.length<2) return;
+        const h = rows[0].map(x=>x.toString().toLowerCase());
+        const find = (arr) => h.findIndex(x => arr.some(k => x.includes(k.toLowerCase())));
+        const idx = {
+            title: find(['title','שם','כותרת','event']),
+            date: find(['date','תאריך','מועד']),
+            desc: find(['desc','תיאור','פרטים']),
+            audience: find(['audience','קהל']),
+            tasks: find(['tasks','משימות'])
+        };
+        
+        if(idx.title<0 || idx.date<0) return alert("לא נמצאו עמודות שם/תאריך");
+
+        const newEv = [];
+        rows.slice(1).forEach((r, i) => {
+            if(!r[idx.title] || !r[idx.date]) return;
+            const d = parseDate(r[idx.date]);
+            if(!d) return;
+            
+            const tasks = idx.tasks>-1 && r[idx.tasks] ? r[idx.tasks].toString().split(/,|\n/).map(t=>({text:t.trim(), done:false})).filter(t=>t.text) : [];
+            
+            newEv.push({
+                id: Date.now()+i+Math.floor(Math.random()*1000),
+                title: r[idx.title].toString().trim(),
+                dateObj: d, dateStr: `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`,
+                desc: idx.desc>-1 ? r[idx.desc] : '',
+                audience: idx.audience>-1 ? r[idx.audience] : '',
+                tasks: tasks, image: null, color: colors[i%colors.length]
+            });
+        });
+
+        if(newEv.length){
+            const obj={}; newEv.forEach(e=>{obj[e.id]={...e, dateObj:e.dateObj.toISOString()}});
+            db.ref('events').set(events.length? {...(await getEventsMap()), ...obj} : obj); // Merge logic simplified
+            // For simplicity in this version, we just Overwrite or Append locally
+             eventsRef.set(obj); 
+            alert(`נטענו ${newEv.length} אירועים`);
+        }
+    }
+
+    function parseDate(v) {
+        if(typeof v === 'number') return new Date(Math.round((v-25569)*864e5));
+        if(typeof v === 'string') {
+            const p = v.match(/(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})/);
+            if(p) {
+                let d1=parseInt(p[1]), d2=parseInt(p[2]), y=parseInt(p[3]);
+                if(y<100) y+=2000;
+                if(d2>12) return new Date(y, d1-1, d2);
+                if(d1>12) return new Date(y, d2-1, d1);
+                return new Date(y, d1-1, d2);
+            }
+        }
+        return null;
+    }
+
+    // --- RENDERERS ---
+    function renderMain() {
+        document.getElementById('calendarTitle').innerText = currentDate.toLocaleString('he-IL', {month:'long', year:'numeric'});
+        
+        // List
+        const list = document.getElementById('listView'); list.innerHTML = '';
+        const mEvents = events.filter(e => e.dateObj.getMonth()===currentDate.getMonth() && e.dateObj.getFullYear()===currentDate.getFullYear());
+        mEvents.forEach(e => {
+            const pending = e.tasks.filter(t=>!t.done).length;
+            list.innerHTML += `
+            <div onclick="openEventModal(${e.id})" class="glass-card p-6 rounded-3xl cursor-pointer hover:border-[${e.color}] border border-transparent group transition-all">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black text-white shadow-lg" style="background: linear-gradient(135deg, ${e.color}, #000)">
+                        ${e.dateObj.getDate()}
+                    </div>
+                    ${pending ? `<span class="bg-rose-500/20 text-rose-300 px-2 py-1 rounded text-xs font-bold border border-rose-500/20">${pending} משימות</span>`:''}
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2 leading-tight group-hover:text-indigo-300 transition">${e.title}</h3>
+                <div class="mt-4 flex items-center gap-2 text-xs text-slate-400 font-medium">
+                    <i data-lucide="users" class="w-3 h-3"></i> ${e.audience||'כללי'}
+                </div>
+            </div>`;
+        });
+
+        // Calendar
+        const grid = document.getElementById('calendarGrid'); grid.innerHTML = '';
+        const year=currentDate.getFullYear(), month=currentDate.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month+1, 0).getDate();
+        
+        ['א','ב','ג','ד','ה','ו','ש'].forEach(d=>grid.innerHTML+=`<div class="text-center text-slate-500 text-xs font-bold py-2">${d}</div>`);
+        for(let i=0; i<firstDay; i++) grid.innerHTML+=`<div class="h-24 bg-white/5 rounded-xl opacity-30"></div>`;
+        for(let d=1; d<=daysInMonth; d++) {
+            const dayEv = events.filter(e=>e.dateObj.getDate()===d && e.dateObj.getMonth()===month && e.dateObj.getFullYear()===year);
+            let html = dayEv.map(e=>`<div onclick="openEventModal(${e.id}); event.stopPropagation()" class="text-[10px] px-1.5 py-0.5 rounded text-white mb-1 truncate cursor-pointer hover:brightness-110" style="background:${e.color}">${e.title}</div>`).join('');
+            grid.innerHTML += `<div class="h-24 bg-white/5 rounded-xl p-2 border border-white/5 hover:bg-white/10 transition overflow-hidden">
+                <span class="text-slate-400 text-xs font-bold mb-1 block">${d}</span>
+                <div class="flex flex-col gap-0.5">${html}</div>
+            </div>`;
+        }
+        lucide.createIcons();
+    }
+
+    function renderGlobalTasks() {
+        const cont = document.getElementById('globalTaskList'); cont.innerHTML='';
+        let count=0;
+        [...events].sort((a,b)=>a.dateObj-b.dateObj).forEach(e => {
+            const open = e.tasks.filter(t=>!t.done);
+            if(open.length) {
+                count += open.length;
+                cont.innerHTML += `
+                <div class="glass-card p-5 rounded-2xl border-r-4 border-r-[${e.color}]">
+                    <div class="flex items-center gap-3 mb-3 border-b border-white/10 pb-2">
+                        <div class="w-2 h-2 rounded-full" style="background:${e.color}; box-shadow:0 0 10px ${e.color}"></div>
+                        <h4 class="font-bold text-white cursor-pointer hover:underline" onclick="openEventModal(${e.id})">${e.title}</h4>
+                        <span class="mr-auto text-xs font-mono text-slate-400">${e.dateStr}</span>
+                    </div>
+                    <div class="space-y-1">
+                        ${open.map(t=>`<div class="flex items-center gap-2 p-1.5 hover:bg-white/5 rounded"><div class="w-1.5 h-1.5 rounded-full bg-slate-600"></div><span class="text-sm text-slate-300">${t.text}</span></div>`).join('')}
+                    </div>
+                </div>`;
+            }
+        });
+        document.getElementById('noTasksMessage').classList.toggle('hidden', count>0);
+    }
+
+    // --- MODALS & UPDATES ---
+    function openEventModal(id) { activeEventId=id; updateModalContent(events.find(e=>e.id==id)); document.getElementById('eventModal').classList.remove('hidden'); document.getElementById('eventModal').classList.add('flex'); }
+    function closeModals() { document.querySelectorAll('.fixed').forEach(e=>{e.classList.add('hidden'); e.classList.remove('flex')}); }
+    
+    function updateModalContent(e) {
+        if(!e) return;
+        document.getElementById('emTitle').innerText = e.title;
+        document.getElementById('emDate').innerText = e.dateStr;
+        document.getElementById('emDesc').innerText = e.desc;
+        document.getElementById('emAudience').innerText = e.audience||'—';
+        document.getElementById('emHeader').style.background = `linear-gradient(135deg, ${e.color}, transparent)`;
+        
+        const img = document.getElementById('emImage'), ph=document.getElementById('uploadPlaceholder');
+        if(e.image) { img.src=e.image; img.classList.remove('hidden'); ph.classList.add('hidden'); }
+        else { img.classList.add('hidden'); ph.classList.remove('hidden'); }
+        
+        const list = document.getElementById('taskList'); list.innerHTML='';
+        e.tasks.forEach((t,i) => {
+            list.innerHTML += `
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-black/20 hover:bg-black/40 transition group">
+                <input type="checkbox" class="w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-0 cursor-pointer" ${t.done?'checked':''} onchange="toggleTask(${i})">
+                <span class="flex-1 text-sm text-slate-200 ${t.done?'line-through text-slate-600':''}">${t.text}</span>
+                <button onclick="delTask(${i})" class="text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>`;
+        });
+        document.getElementById('taskCount').innerText = `${e.tasks.filter(t=>!t.done).length} לביצוע`;
+        lucide.createIcons();
+    }
+
+    function toggleTask(i) { const e=events.find(x=>x.id==activeEventId); e.tasks[i].done=!e.tasks[i].done; saveEvent(e); updateModalContent(e); }
+    function delTask(i) { const e=events.find(x=>x.id==activeEventId); e.tasks.splice(i,1); saveEvent(e); updateModalContent(e); }
+    function addNewTask() { const inp=document.getElementById('newTaskInput'); if(!inp.value.trim()) return; const e=events.find(x=>x.id==activeEventId); e.tasks.push({text

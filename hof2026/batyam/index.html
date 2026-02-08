@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ניהול חוף בת ים - Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { 
+            font-family: 'Heebo', sans-serif; 
+            background: radial-gradient(circle at top left, #1e3a8a, #0f172a);
+            background-attachment: fixed;
+            min-height: 100vh; 
+            padding-bottom: 40px; 
+            color: #1e293b;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+            opacity: 0.4;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .glass-card { 
+            background: rgba(255, 255, 255, 0.92); 
+            backdrop-filter: blur(16px); 
+            border: 1px solid rgba(255,255,255,0.4); 
+            border-radius: 1rem; 
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1); 
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        #map { height: 60vh; width: 100%; border-radius: 0.75rem; }
+        
+        .toggle-btn { border-radius: 9999px; font-weight: 700; transition: all 0.3s ease; }
+        .tab-active { background-color: #0ea5e9; color: white; box-shadow: 0 0 15px rgba(14, 165, 233, 0.5); }
+        
+        .map-label { background-color: rgba(255, 255, 255, 0.95); border: none; border-radius: 4px; font-weight: 700; color: #0f172a; padding: 2px 6px; white-space: nowrap; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .leaflet-tooltip-bottom:before { display: none; } 
+        
+        .loader { border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid #38bdf8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <header class="sticky top-0 z-50 p-4 pb-2">
+        <div class="max-w-6xl mx-auto glass-card overflow-hidden p-0">
+            
+            <div class="h-32 w-full relative bg-slate-200">
+                <img src="banner.jpg" 
+                     onerror="this.src='https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=1000&auto=format&fit=crop'" 
+                     class="w-full h-full object-cover" alt="Bat Yam Beach Banner">
+                
+                <div class="absolute bottom-0 left-0 w-full h-full bg-gradient-to-t from-black/60 to-transparent flex items-end p-4">
+                    <div>
+                        <h1 class="text-3xl font-black text-white tracking-tight drop-shadow-md">🌊 חוף בת ים</h1>
+                        <p class="text-sm text-sky-200 font-bold uppercase tracking-wider drop-shadow-sm">מערכת ניהול - קיץ 2026</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 flex justify-between items-center gap-4">
+                <div class="flex-1 flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <span class="text-lg">👤</span>
+                    <select id="owner-filter" onchange="applyFilter()" class="w-full bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-sky-500 focus:border-sky-500 block p-2 outline-none">
+                        <option value="all">הצג את כל המשימות</option>
+                    </select>
+                </div>
+                <div><span id="connection-status" class="text-xs font-bold bg-sky-100 text-sky-800 px-3 py-1 rounded-full animate-pulse">מתחבר...</span></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 space-y-6">
+        
+        <div class="flex bg-white/20 backdrop-blur p-1 rounded-full shadow-lg max-w-md mx-auto border border-white/30">
+            <button id="btn-list" onclick="switchView('list')" class="toggle-btn flex-1 py-2 text-center text-slate-200 hover:text-white tab-active">📦 משימות</button>
+            <button id="btn-map" onclick="switchView('map')" class="toggle-btn flex-1 py-2 text-center text-slate-200 hover:text-white">🗺️ מפה</button>
+        </div>
+
+        <div id="loading" class="text-center py-10"><div class="loader"></div><p class="text-sky-200 font-medium mt-2">טוען נתונים...</p></div>
+        <div id="error-msg" class="hidden p-4 bg-red-100 text-red-700 rounded-xl text-center text-sm font-bold shadow-lg"></div>
+
+        <div id="empty-state" class="hidden text-center py-10 text-slate-300 italic">
+            אין משימות תחת הסינון שנבחר
+        </div>
+
+        <div id="view-list" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
+        <div id="view-map" class="hidden glass-card p-1">
+            <div id="map"></div>
+            <div class="p-2 flex flex-wrap gap-2 justify-center bg-white/90 rounded-b-lg text-xs font-bold shadow-inner">
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500 border border-white"></span> בוצע</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-orange-500 border border-white"></span> ביצוע</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500 border border-white"></span> תכנון</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-slate-500 border border-white"></span> טרם הוחלט</span>
+                <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500 border border-white"></span> תקוע</span>
+            </div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        const SHEET_ID = "1pI5I9Jd63M7Y-JMzSV6nj4nBqrZZ0tv4MDgmXCe0Nv8";
+
+        const vectorConfig = {
+            "fixed": { label: "עסקי", color: "text-blue-600 bg-blue-50 border-blue-200", dot: "#3b82f6" },
+            "popup": { label: "פופ-אפ", color: "text-purple-600 bg-purple-50 border-purple-200", dot: "#8b5cf6" },
+            "physical": { label: "פיזי", color: "text-orange-600 bg-orange-50 border-orange-200", dot: "#f97316" },
+            "branding": { label: "מיתוג", color: "text-pink-600 bg-pink-50 border-pink-200", dot: "#ec4899" },
+            "other": { label: "כללי", color: "text-slate-500 bg-slate-100 border-slate-200", dot: "#64748b" }
+        };
+
+        const statusColors = {
+            "done": "#22c55e", "wip": "#f97316", "plan": "#3b82f6", "undecided": "#64748b", "stuck": "#ef4444"
+        };
+
+        const masterLocationOrder = [
+            "החוף הדרומי", "תצפית הים", "תאיו", "חוף הדקלים",
+            "פארק אקסטרים", "פארק מים מתנפח", "סנסט", "מתחם בסר",
+            "שצ\"פ התיירות", "שצ\"פ נורדאו", "מנאו", "ברבוניה"
+        ];
+
+        const locationCoords = {
+            "החוף הדרומי": [32.0015, 34.7360], "תצפית הים": [32.0045, 34.7360], "תאיו": [32.0035, 34.7360],
+            "חוף הדקלים": [32.0065, 34.7370], "פארק אקסטרים": [32.0080, 34.7375], "פארק מים מתנפח": [32.0090, 34.7380], 
+            "סנסט": [32.0110, 34.7385], "מתחם בסר": [32.0145, 34.7395], "שצ\"פ התיירות": [32.0155, 34.7400], 
+            "שצ\"פ נורדאו": [32.0205, 34.7415], "מנאו": [32.0225, 34.7420], "ברבוניה": [32.0240, 34.7425]
+        };
+
+        const map = L.map('map').setView([32.012, 34.739], 14);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+
+        let allTasksData = [];
+        let uniqueOwners = new Set();
+
+        function cleanStr(str) { return str ? str.toString().trim() : ""; }
+        
+        function identifyVector(vecStr) {
+            const v = cleanStr(vecStr);
+            if(v.includes("מיתוג") || v.includes("שיווק") || v.includes("פרסום")) return "branding";
+            if(v.includes("כלכלי") || v.includes("עסקי")) return "fixed";
+            if(v.includes("פופ")) return "popup";
+            if(v.includes("פיזי") || v.includes("ציבורי")) return "physical";
+            return "other";
+        }
+
+        function getStatusColorHex(statusText) {
+            const s = cleanStr(statusText);
+            if(s.includes("תקוע") || s.includes("בעיה")) return statusColors.stuck;
+            if(s.includes("בוצע") || s.includes("הושלם")) return statusColors.done;
+            if(s.includes("בביצוע") || s.includes("ביצוע")) return statusColors.wip;
+            if(s.includes("טרם") || s.includes("הוחלט")) return statusColors.undecided;
+            return statusColors.plan; 
+        }
+
+        function getStatusCardStyle(statusText) {
+            const s = cleanStr(statusText);
+            if(s.includes("תקוע")) return "border-l-4 border-red-500 bg-red-50";
+            if(s.includes("בוצע") || s.includes("הושלם")) return "border-l-4 border-green-500 bg-green-50 opacity-70";
+            if(s.includes("בביצוע") || s.includes("ביצוע")) return "border-l-4 border-orange-500 bg-orange-50";
+            if(s.includes("טרם") || s.includes("הוחלט")) return "border-l-4 border-slate-400 bg-slate-50";
+            return "border-l-4 border-blue-400 bg-white";
+        }
+
+        function populateOwnerFilter() {
+            const select = document.getElementById('owner-filter');
+            select.innerHTML = '<option value="all">הצג את כל המשימות</option>';
+            Array.from(uniqueOwners).sort().forEach(owner => {
+                const opt = document.createElement('option');
+                opt.value = owner;
+                opt.innerText = owner;
+                select.appendChild(opt);
+            });
+        }
+
+        function applyFilter() {
+            const selectedOwner = document.getElementById('owner-filter').value;
+            const filteredData = (selectedOwner === "all") 
+                ? allTasksData 
+                : allTasksData.filter(t => t.owner.includes(selectedOwner));
+            renderDashboard(filteredData);
+        }
+
+        window.googleDataCallback = function(json) {
+            try {
+                allTasksData = [];
+                uniqueOwners.clear();
+
+                json.table.rows.forEach(row => {
+                    let loc = cleanStr(row.c[0]?.v);
+                    const vecRaw = cleanStr(row.c[1]?.v);
+                    const task = cleanStr(row.c[2]?.v);
+                    const status = cleanStr(row.c[3]?.v) || "בתכנון";
+                    const owner = cleanStr(row.c[4]?.v);
+
+                    if (!loc || loc === "Location" || loc === "מיקום" || loc === "שם המקום") return;
+                    if (vecRaw === "Vector" || vecRaw === "וקטור") return;
+
+                    const knownKey = masterLocationOrder.find(k => loc.includes(k) || k.includes(loc));
+                    if(knownKey) loc = knownKey;
+
+                    const vecKey = identifyVector(vecRaw);
+
+                    if(owner) {
+                        const splitOwners = owner.split(/,| ו|\/|&|\+/);
+                        splitOwners.forEach(o => { if(o.trim()) uniqueOwners.add(o.trim()); });
+                    }
+
+                    allTasksData.push({ loc, task, status, owner, vecKey, vecRaw });
+                });
+
+                populateOwnerFilter();
+
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('view-list').classList.remove('hidden');
+                document.getElementById('connection-status').innerText = `מחובר (${allTasksData.length})`;
+                document.getElementById('connection-status').className = "text-xs font-bold bg-green-100 text-green-800 px-3 py-1 rounded-full";
+                document.getElementById('connection-status').classList.remove('animate-pulse');
+
+                renderDashboard(allTasksData);
+
+            } catch (e) {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error-msg').innerText = "שגיאה: " + e.message;
+                document.getElementById('error-msg').classList.remove('hidden');
+            }
+        };
+
+        function renderDashboard(dataToRender) {
+            const container = document.getElementById('view-list');
+            container.innerHTML = "";
+            map.eachLayer(l => { if(l instanceof L.Marker) l.remove(); });
+            const drawnLocs = new Set();
+
+            if (dataToRender.length === 0) {
+                document.getElementById('empty-state').classList.remove('hidden');
+                return;
+            } else {
+                document.getElementById('empty-state').classList.add('hidden');
+            }
+
+            const groupedByLocation = {};
+            dataToRender.forEach(t => {
+                if (!groupedByLocation[t.loc]) groupedByLocation[t.loc] = [];
+                groupedByLocation[t.loc].push(t);
+
+                let coords = locationCoords[t.loc];
+                if (coords) {
+                    const markerColor = getStatusColorHex(t.status);
+                    const markerHtml = `<div style="background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.4);"></div>`;
+                    const icon = L.divIcon({ className: 'custom-div-icon', html: markerHtml, iconSize: [14, 14], iconAnchor: [7, 7] });
+                    
+                    const m = L.marker(coords, { icon: icon })
+                        .bindPopup(`<div class="text-right font-['Heebo']" dir="rtl"><strong>${t.loc}</strong><br>${t.task}<br><span style="color:${markerColor}; font-weight:bold">${t.status}</span></div>`)
+                        .addTo(map);
+
+                    if (!drawnLocs.has(t.loc)) {
+                        m.bindTooltip(t.loc, { permanent: true, direction: 'bottom', className: 'map-label', offset: [0, 10] });
+                        drawnLocs.add(t.loc);
+                    }
+                }
+            });
+
+            const activeLocations = Object.keys(groupedByLocation);
+            activeLocations.sort((a, b) => {
+                const idxA = masterLocationOrder.indexOf(a);
+                const idxB = masterLocationOrder.indexOf(b);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                return a.localeCompare(b);
+            });
+
+            activeLocations.forEach(locName => {
+                const tasks = groupedByLocation[locName];
+                
+                let html = `
+                    <div class="glass-card flex flex-col h-full">
+                        <div class="p-3 border-b border-gray-200/50 flex justify-between items-center bg-white/50 rounded-t-2xl">
+                            <h3 class="font-bold text-slate-800 text-lg flex items-center gap-1">📍 ${locName}</h3>
+                            <span class="text-xs font-bold bg-white px-2 py-1 rounded-full shadow-sm text-slate-500 border border-slate-100">${tasks.length}</span>
+                        </div>
+                        <div class="p-3 space-y-2 flex-grow">`;
+                
+                tasks.forEach(t => {
+                    const vecStyle = vectorConfig[t.vecKey] || vectorConfig["other"];
+                    const cardStyle = getStatusCardStyle(t.status);
+
+                    html += `
+                        <div class="relative p-3 rounded-lg shadow-sm border border-gray-100 ${cardStyle} transition hover:shadow-md hover:translate-x-1">
+                            <div class="flex justify-between items-start mb-1">
+                                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${vecStyle.color}">${vecStyle.label}</span>
+                                <span class="text-[10px] text-slate-500 font-bold">${t.owner}</span>
+                            </div>
+                            <div class="font-bold text-slate-800 text-sm leading-tight">${t.task}</div>
+                            <div class="mt-2 text-xs flex justify-between items-center text-slate-500 font-medium">
+                                <span>${t.status}</span>
+                            </div>
+                        </div>`;
+                });
+                
+                html += `</div></div>`;
+                container.innerHTML += html;
+            });
+        }
+
+        const script = document.createElement('script');
+        script.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=responseHandler:googleDataCallback`;
+        document.body.appendChild(script);
+
+        function switchView(v) {
+            document.getElementById('view-list').classList.toggle('hidden', v !== 'list');
+            document.getElementById('view-map').classList.toggle('hidden', v !== 'map');
+            document.getElementById('btn-list').classList.toggle('tab-active', v === 'list');
+            document.getElementById('btn-map').classList.toggle('tab-active', v === 'map');
+            if(v === 'map') setTimeout(() => map.invalidateSize(), 200);
+        }
+    </script>
+</body>
+</html>
